@@ -31,6 +31,7 @@ public sealed class MainForm : Form
     private readonly Panel _header = new();
     private readonly FlatButton _buttonMinimize = new();
     private readonly FlatButton _buttonAbout = new();
+    private readonly FlatButton _buttonClose = new();
     private readonly Panel _pairPanel = new();
     private readonly Panel _connectedPanel = new();
     private readonly Label _codeLabel = new();
@@ -49,6 +50,7 @@ public sealed class MainForm : Form
     private readonly CheckBox _checkAutostart = new();
     private readonly CheckBox _checkAutoCopy = new();
     private readonly CheckBox _checkDarkMode = new();
+    private readonly CheckBox _checkMinimizeToTray = new();
     private readonly Button _buttonClear = new();
     private readonly Label _footerNote = new();
     private NotifyIcon _tray = null!;
@@ -59,8 +61,10 @@ public sealed class MainForm : Form
     private string _statusText = "等待手机配对";
     private Color _statusColor = Theme.Warn;
     private bool _showPairing;
+    private bool _exiting;
 
-    public MainForm(AppConfig config, List<SmsMessage> messages, bool startServer = true)
+    public MainForm(
+        AppConfig config, List<SmsMessage> messages, bool startServer = true, bool applyAutostart = true)
     {
         _config = config;
         _messages = messages;
@@ -91,7 +95,7 @@ public sealed class MainForm : Form
         BuildTray();
 
         // 程序改过名字或挪过位置时，让开机自启指向当前这个 exe，否则开机起的是旧路径。
-        if (_config.StartWithWindows) ApplyAutostart(true);
+        if (applyAutostart && _config.StartWithWindows) ApplyAutostart(true);
 
         if (startServer) StartServer();
         RefreshState();
@@ -154,7 +158,7 @@ public sealed class MainForm : Form
 
     private void BuildUi()
     {
-        // 顶部：标题 + 连接状态 + 最小化/关于（整条都可拖动，只画一条分割线）
+        // 顶部：标题 + 连接状态 + 最小化/关于/关闭（整条都可拖动，只画一条分割线）
         _header.BackColor = Theme.Card;
         _header.Paint += HeaderPaint;
         _header.MouseDown += (_, e) =>
@@ -174,7 +178,7 @@ public sealed class MainForm : Form
         _buttonMinimize.Text = "—";
         _buttonMinimize.Style = FlatButton.Look.Ghost;
         _buttonMinimize.Font = Theme.Ui(9f);
-        _buttonMinimize.Click += (_, _) => WindowState = FormWindowState.Minimized;
+        _buttonMinimize.Click += (_, _) => MinimizeWindow();
         _buttonMinimize.Cursor = Cursors.Hand;
         _header.Controls.Add(_buttonMinimize);
 
@@ -188,6 +192,13 @@ public sealed class MainForm : Form
         };
         _buttonAbout.Cursor = Cursors.Hand;
         _header.Controls.Add(_buttonAbout);
+
+        _buttonClose.Text = "×";
+        _buttonClose.Style = FlatButton.Look.Ghost;
+        _buttonClose.Font = Theme.Ui(10f);
+        _buttonClose.Click += (_, _) => Close();
+        _buttonClose.Cursor = Cursors.Hand;
+        _header.Controls.Add(_buttonClose);
 
         Controls.Add(_header);
 
@@ -289,6 +300,14 @@ public sealed class MainForm : Form
             ApplyTheme();
         };
 
+        _checkMinimizeToTray.AutoSize = true;
+        _checkMinimizeToTray.Text = "最小化到托盘";
+        _checkMinimizeToTray.CheckedChanged += (_, _) =>
+        {
+            _config.MinimizeToTray = _checkMinimizeToTray.Checked;
+            _config.Save();
+        };
+
         ConfigureButton(_buttonClear, "清空记录");
         _buttonClear.Click += (_, _) => ClearMessages();
 
@@ -296,7 +315,9 @@ public sealed class MainForm : Form
         _footerNote.ForeColor = Theme.Muted;
         _footerNote.Text = "短信只在局域网内加密传输，不经过任何服务器";
 
-        _footer.Controls.AddRange([_checkAutostart, _checkAutoCopy, _checkDarkMode, _buttonClear, _footerNote]);
+        _footer.Controls.AddRange([
+            _checkAutostart, _checkAutoCopy, _checkDarkMode, _checkMinimizeToTray, _buttonClear, _footerNote
+        ]);
         Controls.Add(_footer);
 
         // WinForms 里先添加的控件在上层，列表必须显式提到最前面，否则会被白底面板盖住。
@@ -334,7 +355,7 @@ public sealed class MainForm : Form
         _deviceList.BackColor = Theme.Input;
         _deviceList.ForeColor = Theme.Text;
 
-        foreach (var checkBox in new[] { _checkAutostart, _checkAutoCopy, _checkDarkMode })
+        foreach (var checkBox in new[] { _checkAutostart, _checkAutoCopy, _checkDarkMode, _checkMinimizeToTray })
         {
             checkBox.BackColor = Theme.Card;
             checkBox.ForeColor = Theme.Text;
@@ -384,7 +405,7 @@ public sealed class MainForm : Form
 
         using var statusFont = Theme.Ui(9f);
         var statusLeft = dotX + dotSize + S(6);
-        var statusWidth = Math.Max(S(60), _header.Width - statusLeft - S(104));
+        var statusWidth = Math.Max(S(60), _header.Width - statusLeft - S(150));
         TextRenderer.DrawText(
             g, _statusText, statusFont,
             new Rectangle(statusLeft, 0, statusWidth, _header.Height), _statusColor,
@@ -422,13 +443,14 @@ public sealed class MainForm : Form
         var y = 0;
 
         _header.SetBounds(0, y, width, S(46));
-        // 顺序和系统一致：最小化在左，"关于"接管原来的关闭位置
-        _buttonMinimize.SetBounds(width - S(100), S(9), S(32), S(28));
-        _buttonAbout.SetBounds(width - S(58), S(9), S(48), S(28));
+        // 顺序和系统一致：最小化、关于、关闭从左到右排列。
+        _buttonMinimize.SetBounds(width - S(138), S(9), S(32), S(28));
+        _buttonAbout.SetBounds(width - S(98), S(9), S(48), S(28));
+        _buttonClose.SetBounds(width - S(42), S(9), S(32), S(28));
         y += _header.Height;
 
         var bodyTop = y;
-        var footerHeight = S(104);
+        var footerHeight = S(126);
         var paired = _config.Links.Count > 0;
         var showingPairing = _showPairing || !paired;
         var panelHeight = showingPairing ? S(238) : S(142);
@@ -470,7 +492,8 @@ public sealed class MainForm : Form
         _checkAutoCopy.SetBounds(pad + S(116), S(16), S(150), S(24));
         _buttonClear.SetBounds(width - pad - S(90), S(12), S(90), S(30));
         _checkDarkMode.SetBounds(pad, S(50), S(110), S(24));
-        _footerNote.SetBounds(pad + S(116), S(50), width - pad * 2 - S(116), S(22));
+        _checkMinimizeToTray.SetBounds(pad + S(116), S(50), S(140), S(24));
+        _footerNote.SetBounds(pad, S(84), width - pad * 2, S(22));
 
         LayoutCards();
     }
@@ -540,6 +563,7 @@ public sealed class MainForm : Form
         _checkAutostart.Checked = _config.StartWithWindows;
         _checkAutoCopy.Checked = _config.AutoCopy;
         _checkDarkMode.Checked = _config.DarkMode;
+        _checkMinimizeToTray.Checked = _config.MinimizeToTray;
 
         DoLayout();
     }
@@ -619,6 +643,31 @@ public sealed class MainForm : Form
             }
         }
 
+        ShowNotification(message);
+    }
+
+    internal void ShowNotification(SmsMessage message)
+    {
+        if (WindowsNotification.Show(message, () =>
+            {
+                try
+                {
+                    BeginInvoke(() => ShowLegacyNotification(message));
+                }
+                catch
+                {
+                    // 窗口正在退出时无需再回退通知
+                }
+            }))
+        {
+            return;
+        }
+
+        ShowLegacyNotification(message);
+    }
+
+    private void ShowLegacyNotification(SmsMessage message)
+    {
         try
         {
             _lastNotified = message;
@@ -728,8 +777,9 @@ public sealed class MainForm : Form
         ShowTrayTip($"验证码 {code} 已复制");
     }
 
-    private void ShowFromTray()
+    public void ShowFromTray()
     {
+        ShowInTaskbar = true;
         Show();
         WindowState = FormWindowState.Normal;
         MoveToBottomRight();
@@ -737,13 +787,35 @@ public sealed class MainForm : Form
         Activate();
     }
 
+    public void HandleNotificationActivation(string? code)
+    {
+        ShowFromTray();
+        if (string.IsNullOrEmpty(code)) return;
+
+        CopyToClipboard(code, "验证码", silent: true);
+        ShowTrayTip($"验证码 {code} 已复制");
+    }
+
+    private void MinimizeWindow()
+    {
+        if (_config.MinimizeToTray)
+        {
+            Hide();
+            ShowInTaskbar = false;
+            return;
+        }
+
+        ShowInTaskbar = true;
+        WindowState = FormWindowState.Minimized;
+    }
+
     private void ExitApp()
     {
-        _server?.Dispose();
-        _discovery?.Dispose();
-        _tray.Visible = false;
-        Application.Exit();
+        _exiting = true;
+        Close();
     }
+
+    internal void ExitForDebug() => ExitApp();
 
     private static void ApplyAutostart(bool enabled)
     {
@@ -782,6 +854,13 @@ public sealed class MainForm : Form
 
     protected override void OnFormClosing(FormClosingEventArgs e)
     {
+        if (!_exiting)
+        {
+            e.Cancel = true;
+            MinimizeWindow();
+            return;
+        }
+
         _server?.Dispose();
         _discovery?.Dispose();
         if (_tray != null) _tray.Visible = false;

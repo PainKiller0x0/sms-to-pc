@@ -75,13 +75,13 @@ public sealed class AboutForm : Form
 
         var hint = new Label
         {
-            Text = "关闭本窗口请用托盘图标右键 → 退出",
+            Text = "主窗口关闭不会退出；退出请用托盘图标右键 → 退出",
             Font = Theme.Ui(8f),
             ForeColor = Theme.Muted,
             AutoSize = false,
             TextAlign = ContentAlignment.MiddleLeft,
         };
-        hint.SetBounds(S(30), y, S(240), S(32));
+        hint.SetBounds(S(30), y, S(270), S(32));
         Controls.Add(hint);
 
         var ok = new Button

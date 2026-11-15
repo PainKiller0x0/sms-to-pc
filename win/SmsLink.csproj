@@ -14,13 +14,28 @@
     <AssemblyTitle>码上来</AssemblyTitle>
     <Description>手机收到短信，电脑上直接看（局域网加密传输）</Description>
     <SatelliteResourceLanguages>zh-Hans</SatelliteResourceLanguages>
+    <WindowsSdkPackageVersion>10.0.19041.45</WindowsSdkPackageVersion>
   </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Toolkit.Uwp.Notifications" Version="7.1.3"
+                      GeneratePathProperty="true" ExcludeAssets="compile;runtime" />
+    <!-- net8.0-windows 不带 Windows 10 版本号时 NuGet 会误选仅生成 XML 的 netstandard 资产。 -->
+    <Reference Include="Microsoft.Toolkit.Uwp.Notifications"
+               HintPath="$(PkgMicrosoft_Toolkit_Uwp_Notifications)\lib\net5.0-windows10.0.17763\Microsoft.Toolkit.Uwp.Notifications.dll"
+               Private="true" />
+  </ItemGroup>
 
   <ItemGroup>
     <!-- 微信赞赏码：编译进 exe，换图也行（程序目录放同名 about-qr.png 会优先用那个） -->
     <EmbeddedResource Include="about-qr.png" />
     <!-- 程序图标：exe 图标和窗口/托盘图标共用同一个文件，保证完全一致 -->
     <EmbeddedResource Include="app.ico" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.Windows.SDK.NET.Ref"
+                        IsImplicitlyDefined="true" Pack="false" PrivateAssets="all" />
   </ItemGroup>
 
 </Project>

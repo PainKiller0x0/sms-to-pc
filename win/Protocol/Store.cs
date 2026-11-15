@@ -51,6 +51,7 @@ public sealed class AppConfig
     [JsonPropertyName("sound")] public bool Sound { get; set; } = true;
     [JsonPropertyName("start_with_windows")] public bool StartWithWindows { get; set; }
     [JsonPropertyName("dark_mode")] public bool DarkMode { get; set; }
+    [JsonPropertyName("minimize_to_tray")] public bool MinimizeToTray { get; set; }
     [JsonPropertyName("edge_hide")] public bool EdgeHide { get; set; } = true;
     [JsonPropertyName("window_x")] public int WindowX { get; set; } = int.MinValue;
     [JsonPropertyName("window_y")] public int WindowY { get; set; } = int.MinValue;
