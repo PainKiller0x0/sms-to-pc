@@ -1,21 +1,94 @@
 using System.Drawing.Drawing2D;
+using System.Runtime.InteropServices;
 
 namespace SmsLink.Ui;
 
 /// <summary>统一的配色、字体和圆角绘制工具，界面各处都用它，避免风格漂移。</summary>
 public static class Theme
 {
-    public static readonly Color Brand = Color.FromArgb(0x4F, 0x46, 0xE5);
-    public static readonly Color BrandDark = Color.FromArgb(0x43, 0x38, 0xCA);
-    public static readonly Color BrandSoft = Color.FromArgb(0xEE, 0xF0, 0xFE);
-    public static readonly Color Bg = Color.FromArgb(0xF4, 0xF5, 0xF8);
-    public static readonly Color Card = Color.White;
-    public static readonly Color Line = Color.FromArgb(0xE6, 0xE8, 0xEF);
-    public static readonly Color Text = Color.FromArgb(0x1C, 0x1F, 0x26);
-    public static readonly Color Muted = Color.FromArgb(0x6B, 0x72, 0x80);
-    public static readonly Color Ok = Color.FromArgb(0x16, 0xA3, 0x4A);
-    public static readonly Color Warn = Color.FromArgb(0xF5, 0x9E, 0x0B);
-    public static readonly Color Danger = Color.FromArgb(0xDC, 0x26, 0x26);
+    public static bool IsDark { get; private set; }
+
+    public static Color Brand => IsDark ? Color.FromArgb(0x81, 0x8C, 0xFF) : Color.FromArgb(0x4F, 0x46, 0xE5);
+    public static Color BrandDark => IsDark ? Color.FromArgb(0xA5, 0xAD, 0xFF) : Color.FromArgb(0x43, 0x38, 0xCA);
+    public static Color BrandHover => IsDark ? Color.FromArgb(0x92, 0x9B, 0xFF) : Color.FromArgb(0x5B, 0x53, 0xE8);
+    public static Color BrandSoft => IsDark ? Color.FromArgb(0x2A, 0x2E, 0x52) : Color.FromArgb(0xEE, 0xF0, 0xFE);
+    public static Color Bg => IsDark ? Color.FromArgb(0x12, 0x14, 0x19) : Color.FromArgb(0xF4, 0xF5, 0xF8);
+    public static Color Card => IsDark ? Color.FromArgb(0x1B, 0x1E, 0x25) : Color.White;
+    public static Color Input => IsDark ? Color.FromArgb(0x22, 0x26, 0x2F) : Color.White;
+    public static Color Line => IsDark ? Color.FromArgb(0x35, 0x3A, 0x46) : Color.FromArgb(0xE6, 0xE8, 0xEF);
+    public static Color Text => IsDark ? Color.FromArgb(0xF0, 0xF2, 0xF7) : Color.FromArgb(0x1C, 0x1F, 0x26);
+    public static Color Muted => IsDark ? Color.FromArgb(0xA6, 0xAD, 0xBB) : Color.FromArgb(0x6B, 0x72, 0x80);
+    public static Color Ok => IsDark ? Color.FromArgb(0x4A, 0xD4, 0x7D) : Color.FromArgb(0x16, 0xA3, 0x4A);
+    public static Color Warn => IsDark ? Color.FromArgb(0xFB, 0xB9, 0x42) : Color.FromArgb(0xF5, 0x9E, 0x0B);
+    public static Color Danger => IsDark ? Color.FromArgb(0xFF, 0x7B, 0x7B) : Color.FromArgb(0xDC, 0x26, 0x26);
+    public static Color OnBrand => Color.White;
+    public static Color Bubble => IsDark ? Color.FromArgb(0x20, 0x23, 0x2B) : Color.White;
+    public static Color CodeBubble => IsDark ? Color.FromArgb(0x28, 0x2D, 0x4C) : Color.FromArgb(0xEC, 0xEF, 0xFE);
+    public static Color CodeLine => IsDark ? Color.FromArgb(0x4B, 0x54, 0x88) : Color.FromArgb(0xD8, 0xDD, 0xFB);
+    public static Color GhostHover => IsDark ? Color.FromArgb(0x2B, 0x2F, 0x39) : Color.FromArgb(0xF7, 0xF8, 0xFB);
+    public static Color GhostPressed => IsDark ? Color.FromArgb(0x35, 0x3A, 0x46) : Color.FromArgb(0xEC, 0xED, 0xF3);
+    public static Color Disabled => IsDark ? Color.FromArgb(0x25, 0x28, 0x30) : Color.FromArgb(0xF1, 0xF2, 0xF6);
+    public static Color DisabledText => IsDark ? Color.FromArgb(0x72, 0x78, 0x84) : Color.FromArgb(0xB0, 0xB4, 0xBE);
+    public static Color DangerSoft => IsDark ? Color.FromArgb(0x3A, 0x25, 0x29) : Color.White;
+    public static Color DangerHover => IsDark ? Color.FromArgb(0x4A, 0x29, 0x2E) : Color.FromArgb(0xFE, 0xF2, 0xF2);
+    public static Color DangerPressed => IsDark ? Color.FromArgb(0x55, 0x2D, 0x33) : Color.FromArgb(0xFC, 0xE8, 0xE8);
+    public static Color DangerLine => IsDark ? Color.FromArgb(0x75, 0x3D, 0x46) : Color.FromArgb(0xFA, 0xCB, 0xCB);
+
+    public static void Apply(bool dark) => IsDark = dark;
+
+    public static void ApplyButton(Button button)
+    {
+        button.FlatStyle = FlatStyle.Flat;
+        button.UseVisualStyleBackColor = false;
+        button.BackColor = Input;
+        button.ForeColor = Text;
+        button.FlatAppearance.BorderColor = Line;
+        button.FlatAppearance.MouseOverBackColor = GhostHover;
+        button.FlatAppearance.MouseDownBackColor = GhostPressed;
+    }
+
+    public static void ApplyMenu(ContextMenuStrip menu)
+    {
+        menu.BackColor = Card;
+        menu.ForeColor = Text;
+        menu.Renderer = new ToolStripProfessionalRenderer(new MenuColors());
+        foreach (ToolStripItem item in menu.Items)
+        {
+            item.BackColor = Card;
+            item.ForeColor = item.Enabled ? Text : DisabledText;
+        }
+    }
+
+    public static void ApplyTitleBar(Form form)
+    {
+        try
+        {
+            var dark = IsDark ? 1 : 0;
+            if (DwmSetWindowAttribute(form.Handle, 20, ref dark, sizeof(int)) != 0)
+            {
+                DwmSetWindowAttribute(form.Handle, 19, ref dark, sizeof(int));
+            }
+        }
+        catch
+        {
+            // 旧版 Windows 不支持深色标题栏，忽略。
+        }
+    }
+
+    [DllImport("dwmapi.dll")]
+    private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attribute, ref int value, int size);
+
+    private sealed class MenuColors : ProfessionalColorTable
+    {
+        public override Color ToolStripDropDownBackground => Card;
+        public override Color ImageMarginGradientBegin => Card;
+        public override Color ImageMarginGradientMiddle => Card;
+        public override Color ImageMarginGradientEnd => Card;
+        public override Color MenuItemSelected => GhostHover;
+        public override Color MenuItemBorder => Line;
+        public override Color SeparatorDark => Line;
+        public override Color SeparatorLight => Line;
+    }
 
     private static readonly string UiFamily = PickFamily("Microsoft YaHei UI", "Microsoft YaHei", "Segoe UI");
     private static readonly string MonoFamily = PickFamily("Consolas", "Cascadia Mono", "Courier New");

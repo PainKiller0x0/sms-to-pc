@@ -48,6 +48,7 @@ public sealed class MainForm : Form
     private readonly Panel _footer = new();
     private readonly CheckBox _checkAutostart = new();
     private readonly CheckBox _checkAutoCopy = new();
+    private readonly CheckBox _checkDarkMode = new();
     private readonly Button _buttonClear = new();
     private readonly Label _footerNote = new();
     private NotifyIcon _tray = null!;
@@ -64,6 +65,7 @@ public sealed class MainForm : Form
         _config = config;
         _messages = messages;
         _showPairing = _config.Links.Count == 0;
+        Theme.Apply(_config.DarkMode);
 
         using (var graphics = CreateGraphics())
         {
@@ -153,7 +155,7 @@ public sealed class MainForm : Form
     private void BuildUi()
     {
         // 顶部：标题 + 连接状态 + 最小化/关于（整条都可拖动，只画一条分割线）
-        _header.BackColor = Color.White;
+        _header.BackColor = Theme.Card;
         _header.Paint += HeaderPaint;
         _header.MouseDown += (_, e) =>
         {
@@ -190,7 +192,7 @@ public sealed class MainForm : Form
         Controls.Add(_header);
 
         // 未配对：显示配对码
-        _pairPanel.BackColor = Color.White;
+        _pairPanel.BackColor = Theme.Card;
         _codeLabel.AutoSize = false;
         _codeLabel.BackColor = Theme.BrandSoft;
         _codeLabel.ForeColor = Theme.BrandDark;
@@ -222,7 +224,7 @@ public sealed class MainForm : Form
         Controls.Add(_pairPanel);
 
         // 已配对：显示全部设备，仍可继续添加或逐台解除授权。
-        _connectedPanel.BackColor = Color.White;
+        _connectedPanel.BackColor = Theme.Card;
         _connectedSub.AutoSize = false;
         _connectedSub.ForeColor = Theme.Muted;
         _deviceList.BorderStyle = BorderStyle.FixedSingle;
@@ -254,7 +256,7 @@ public sealed class MainForm : Form
         Controls.Add(_emptyHint);
 
         // 底部设置
-        _footer.BackColor = Color.White;
+        _footer.BackColor = Theme.Card;
         _footer.Paint += (_, e) =>
         {
             using var pen = new Pen(Theme.Line);
@@ -278,6 +280,15 @@ public sealed class MainForm : Form
             _config.Save();
         };
 
+        _checkDarkMode.AutoSize = true;
+        _checkDarkMode.Text = "夜间模式";
+        _checkDarkMode.CheckedChanged += (_, _) =>
+        {
+            _config.DarkMode = _checkDarkMode.Checked;
+            _config.Save();
+            ApplyTheme();
+        };
+
         ConfigureButton(_buttonClear, "清空记录");
         _buttonClear.Click += (_, _) => ClearMessages();
 
@@ -285,19 +296,65 @@ public sealed class MainForm : Form
         _footerNote.ForeColor = Theme.Muted;
         _footerNote.Text = "短信只在局域网内加密传输，不经过任何服务器";
 
-        _footer.Controls.AddRange([_checkAutostart, _checkAutoCopy, _buttonClear, _footerNote]);
+        _footer.Controls.AddRange([_checkAutostart, _checkAutoCopy, _checkDarkMode, _buttonClear, _footerNote]);
         Controls.Add(_footer);
 
         // WinForms 里先添加的控件在上层，列表必须显式提到最前面，否则会被白底面板盖住。
         _messageList.BringToFront();
         _emptyHint.BringToFront();
+        ApplyTheme();
     }
 
     private void ConfigureButton(Button button, string text)
     {
         button.Text = text;
-        button.FlatStyle = FlatStyle.System;
-        button.UseVisualStyleBackColor = true;
+        Theme.ApplyButton(button);
+    }
+
+    private void ApplyTheme()
+    {
+        Theme.Apply(_config.DarkMode);
+
+        BackColor = Theme.Bg;
+        _header.BackColor = Theme.Card;
+        _pairPanel.BackColor = Theme.Card;
+        _connectedPanel.BackColor = Theme.Card;
+        _messageList.BackColor = Theme.Bg;
+        _emptyHint.BackColor = Theme.Bg;
+        _footer.BackColor = Theme.Card;
+
+        _codeLabel.BackColor = Theme.BrandSoft;
+        _codeLabel.ForeColor = Theme.BrandDark;
+        _stepsLabel.ForeColor = Theme.Muted;
+        _addressLabel.ForeColor = Theme.Muted;
+        _connectedSub.ForeColor = Theme.Muted;
+        _emptyHint.ForeColor = Theme.Muted;
+        _footerNote.ForeColor = Theme.Muted;
+
+        _deviceList.BackColor = Theme.Input;
+        _deviceList.ForeColor = Theme.Text;
+
+        foreach (var checkBox in new[] { _checkAutostart, _checkAutoCopy, _checkDarkMode })
+        {
+            checkBox.BackColor = Theme.Card;
+            checkBox.ForeColor = Theme.Text;
+        }
+
+        foreach (var button in new[]
+                 {
+                     _buttonCopyCode, _buttonNewCode, _buttonCancelPairing,
+                     _buttonAddDevice, _buttonUnpair, _buttonClear,
+                 })
+        {
+            Theme.ApplyButton(button);
+        }
+
+        foreach (var card in _messageList.Controls.OfType<MessageCard>()) card.ApplyTheme();
+        if (_trayMenu != null) Theme.ApplyMenu(_trayMenu);
+
+        _statusColor = _config.Links.Count > 0 ? Theme.Ok : Theme.Warn;
+        Invalidate(true);
+        Refresh();
     }
 
     /// <summary>标题、连接状态、按钮都在这一条里，下面只画一条分割线。</summary>
@@ -412,7 +469,8 @@ public sealed class MainForm : Form
         _checkAutostart.SetBounds(pad, S(16), S(110), S(24));
         _checkAutoCopy.SetBounds(pad + S(116), S(16), S(150), S(24));
         _buttonClear.SetBounds(width - pad - S(90), S(12), S(90), S(30));
-        _footerNote.SetBounds(pad, S(50), width - pad * 2, S(22));
+        _checkDarkMode.SetBounds(pad, S(50), S(110), S(24));
+        _footerNote.SetBounds(pad + S(116), S(50), width - pad * 2 - S(116), S(22));
 
         LayoutCards();
     }
@@ -481,6 +539,7 @@ public sealed class MainForm : Form
 
         _checkAutostart.Checked = _config.StartWithWindows;
         _checkAutoCopy.Checked = _config.AutoCopy;
+        _checkDarkMode.Checked = _config.DarkMode;
 
         DoLayout();
     }
@@ -502,6 +561,7 @@ public sealed class MainForm : Form
     {
         var card = new MessageCard(message);
         card.CopyRequested += code => CopyToClipboard(code, "验证码");
+        card.CopyMessageRequested += body => CopyToClipboard(body, "短信");
         return card;
     }
 
@@ -644,6 +704,7 @@ public sealed class MainForm : Form
         _trayMenu.Items.Add("复制配对码", null, (_, _) => CopyToClipboard(_config.PairCode, "配对码"));
         _trayMenu.Items.Add(new ToolStripSeparator());
         _trayMenu.Items.Add("退出", null, (_, _) => ExitApp());
+        Theme.ApplyMenu(_trayMenu);
 
         _tray = new NotifyIcon
         {

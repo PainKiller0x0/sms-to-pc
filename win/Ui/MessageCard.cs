@@ -21,11 +21,13 @@ public sealed class MessageCard : Control
         TextFormatFlags.WordBreak | TextFormatFlags.NoPadding | TextFormatFlags.Left;
 
     private readonly string _displayBody;
+    private readonly ContextMenuStrip _menu = new();
     private Rectangle _copyRect;
     private bool _hoverCopy;
 
     public SmsMessage Message { get; }
     public event Action<string>? CopyRequested;
+    public event Action<string>? CopyMessageRequested;
 
     public MessageCard(SmsMessage message)
     {
@@ -39,6 +41,25 @@ public sealed class MessageCard : Control
         // 气泡自己画圆角，控件底色跟列表背景一致
         BackColor = Theme.Bg;
         Cursor = message.Code is { Length: > 0 } ? Cursors.Hand : Cursors.Default;
+        _menu.Font = Theme.Ui(9f);
+
+        var copyMessage = _menu.Items.Add("复制短信");
+        copyMessage.Click += (_, _) => CopyMessageRequested?.Invoke(Message.Body);
+
+        var code = CodeExtractor.Extract(Message.Body);
+        var copyCode = _menu.Items.Add("提取并复制验证码");
+        copyCode.Enabled = !string.IsNullOrEmpty(code);
+        copyCode.Click += (_, _) => CopyRequested?.Invoke(code!);
+
+        ContextMenuStrip = _menu;
+        ApplyTheme();
+    }
+
+    public void ApplyTheme()
+    {
+        BackColor = Theme.Bg;
+        Theme.ApplyMenu(_menu);
+        Invalidate();
     }
 
     private static string Trim(string body) =>
@@ -118,7 +139,10 @@ public sealed class MessageCard : Control
 
     protected override void OnMouseClick(MouseEventArgs e)
     {
-        if (Message.Code is { Length: > 0 } code) CopyRequested?.Invoke(code);
+        if (e.Button == MouseButtons.Left && Message.Code is { Length: > 0 } code)
+        {
+            CopyRequested?.Invoke(code);
+        }
         base.OnMouseClick(e);
     }
 
@@ -132,8 +156,8 @@ public sealed class MessageCard : Control
         var rect = new Rectangle(0, 0, Width - 1, Height - 1);
         using (var path = Theme.CornerPath(rect, 14, 14, 14, 4))
         {
-            Theme.FillPath(g, path, hasCode ? Color.FromArgb(0xEC, 0xEF, 0xFE) : Color.White);
-            Theme.StrokePath(g, path, hasCode ? Color.FromArgb(0xD8, 0xDD, 0xFB) : Theme.Line);
+            Theme.FillPath(g, path, hasCode ? Theme.CodeBubble : Theme.Bubble);
+            Theme.StrokePath(g, path, hasCode ? Theme.CodeLine : Theme.Line);
         }
 
         var headerTop = PadY;
@@ -195,12 +219,12 @@ public sealed class MessageCard : Control
                 24);
             using (var chipPath = Theme.CornerPath(_copyRect, 12, 12, 12, 12))
             {
-                Theme.FillPath(g, chipPath, _hoverCopy ? Theme.Brand : Color.White);
-                Theme.StrokePath(g, chipPath, _hoverCopy ? Theme.Brand : Color.FromArgb(0xD8, 0xDD, 0xFB));
+                Theme.FillPath(g, chipPath, _hoverCopy ? Theme.Brand : Theme.Card);
+                Theme.StrokePath(g, chipPath, _hoverCopy ? Theme.Brand : Theme.CodeLine);
             }
             TextRenderer.DrawText(
                 g, chipText, chipFont, _copyRect,
-                _hoverCopy ? Color.White : Theme.Brand,
+                _hoverCopy ? Theme.OnBrand : Theme.Brand,
                 TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
         }
         else
@@ -216,5 +240,11 @@ public sealed class MessageCard : Control
         if (delta.TotalSeconds < 60) return "刚刚";
         if (delta.TotalMinutes < 60) return $"{(int)delta.TotalMinutes} 分钟前";
         return time.Date == DateTime.Today ? time.ToString("HH:mm") : time.ToString("M月d日 HH:mm");
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing) _menu.Dispose();
+        base.Dispose(disposing);
     }
 }

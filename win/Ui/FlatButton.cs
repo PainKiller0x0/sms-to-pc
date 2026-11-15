@@ -84,26 +84,26 @@ public sealed class FlatButton : Control
 
     private (Color Back, Color Border, Color Fore) Resolve()
     {
-        if (!Enabled) return (Color.FromArgb(0xF1, 0xF2, 0xF6), Theme.Line, Color.FromArgb(0xB0, 0xB4, 0xBE));
+        if (!Enabled) return (Theme.Disabled, Theme.Line, Theme.DisabledText);
 
         switch (Style)
         {
             case Look.Primary:
                 var back = _pressed ? Theme.BrandDark
-                    : _hover ? Color.FromArgb(0x5B, 0x53, 0xE8)
+                    : _hover ? Theme.BrandHover
                     : Theme.Brand;
-                return (back, Color.Empty, Color.White);
+                return (back, Color.Empty, Theme.OnBrand);
 
             case Look.Danger:
-                var dangerBack = _pressed ? Color.FromArgb(0xFC, 0xE8, 0xE8)
-                    : _hover ? Color.FromArgb(0xFE, 0xF2, 0xF2)
-                    : Color.White;
-                return (dangerBack, Color.FromArgb(0xFA, 0xCB, 0xCB), Theme.Danger);
+                var dangerBack = _pressed ? Theme.DangerPressed
+                    : _hover ? Theme.DangerHover
+                    : Theme.DangerSoft;
+                return (dangerBack, Theme.DangerLine, Theme.Danger);
 
             default:
-                var ghostBack = _pressed ? Color.FromArgb(0xEC, 0xED, 0xF3)
-                    : _hover ? Color.FromArgb(0xF7, 0xF8, 0xFB)
-                    : Color.White;
+                var ghostBack = _pressed ? Theme.GhostPressed
+                    : _hover ? Theme.GhostHover
+                    : Theme.Card;
                 return (ghostBack, Theme.Line, Theme.Text);
         }
     }

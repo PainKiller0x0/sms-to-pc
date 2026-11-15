@@ -35,7 +35,7 @@ public sealed class AboutForm : Form
         MinimizeBox = false;
         ShowInTaskbar = false;
         StartPosition = FormStartPosition.CenterParent;
-        BackColor = Color.White;
+        BackColor = Theme.Card;
         Font = Theme.Ui(9f);
         Icon = AppIcon.ForWindow();
         ClientSize = new Size(S(420), S(756));
@@ -49,7 +49,7 @@ public sealed class AboutForm : Form
 
         y += S(10);
         _qrBox.SetBounds(S(30), y, S(360), S(300));
-        _qrBox.BackColor = Color.White;
+        _qrBox.BackColor = Theme.Card;
         _qrBox.Paint += (_, e) => DrawQr(e.Graphics);
         Controls.Add(_qrBox);
         y += S(312);
@@ -87,13 +87,19 @@ public sealed class AboutForm : Form
         var ok = new Button
         {
             Text = "确定",
-            FlatStyle = FlatStyle.System,
             DialogResult = DialogResult.OK,
         };
+        Theme.ApplyButton(ok);
         ok.SetBounds(S(310), y, S(80), S(32));
         Controls.Add(ok);
         AcceptButton = ok;
         CancelButton = ok;
+    }
+
+    protected override void OnHandleCreated(EventArgs e)
+    {
+        base.OnHandleCreated(e);
+        Theme.ApplyTitleBar(this);
     }
 
     private void AddLabel(string text, Font font, Color color, ref int y, int height)
@@ -131,7 +137,7 @@ public sealed class AboutForm : Form
 
         using (var path = Theme.RoundedPath(box, 12))
         {
-            Theme.FillPath(graphics, path, Color.FromArgb(0xF7, 0xF8, 0xFB));
+            Theme.FillPath(graphics, path, Theme.GhostHover);
             Theme.StrokePath(graphics, path, Theme.Line);
         }
         using var font = Theme.Ui(9f);
