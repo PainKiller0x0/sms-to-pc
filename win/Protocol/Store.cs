@@ -14,6 +14,18 @@ public sealed class Link
     [JsonPropertyName("name")] public string Name { get; set; } = "";
     [JsonPropertyName("paired_at")] public long PairedAt { get; set; }
     [JsonPropertyName("last_seen")] public long LastSeen { get; set; }
+
+    [JsonIgnore]
+    public string DisplayName
+    {
+        get
+        {
+            var name = string.IsNullOrWhiteSpace(Name) ? "Android" : Name;
+            if (string.IsNullOrEmpty(AndroidId)) return name;
+            var suffix = AndroidId.Length <= 4 ? AndroidId : AndroidId[^4..];
+            return $"{name} · {suffix}";
+        }
+    }
 }
 
 public sealed class SmsMessage
@@ -25,6 +37,7 @@ public sealed class SmsMessage
     [JsonPropertyName("received_at")] public long ReceivedAt { get; set; }
     [JsonPropertyName("code")] public string? Code { get; set; }
     [JsonPropertyName("source")] public string Source { get; set; } = "";
+    [JsonPropertyName("source_id")] public string SourceId { get; set; } = "";
 }
 
 public sealed class AppConfig

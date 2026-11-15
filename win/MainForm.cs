@@ -39,6 +39,9 @@ public sealed class MainForm : Form
     private readonly Label _connectedSub = new();
     private readonly Button _buttonCopyCode = new();
     private readonly Button _buttonNewCode = new();
+    private readonly Button _buttonCancelPairing = new();
+    private readonly ListBox _deviceList = new();
+    private readonly Button _buttonAddDevice = new();
     private readonly Button _buttonUnpair = new();
     private readonly FlowLayoutPanel _messageList = new();
     private readonly Label _emptyHint = new();
@@ -54,11 +57,13 @@ public sealed class MainForm : Form
     private SmsMessage? _lastNotified;
     private string _statusText = "等待手机配对";
     private Color _statusColor = Theme.Warn;
+    private bool _showPairing;
 
     public MainForm(AppConfig config, List<SmsMessage> messages, bool startServer = true)
     {
         _config = config;
         _messages = messages;
+        _showPairing = _config.Links.Count == 0;
 
         using (var graphics = CreateGraphics())
         {
@@ -198,6 +203,7 @@ public sealed class MainForm : Form
         _addressLabel.ForeColor = Theme.Muted;
         ConfigureButton(_buttonCopyCode, "复制配对码");
         ConfigureButton(_buttonNewCode, "换一个配对码");
+        ConfigureButton(_buttonCancelPairing, "返回");
         _buttonCopyCode.Click += (_, _) => CopyToClipboard(_config.PairCode, "配对码");
         _buttonNewCode.Click += (_, _) =>
         {
@@ -205,17 +211,32 @@ public sealed class MainForm : Form
             _config.Save();
             RefreshState();
         };
-        _pairPanel.Controls.AddRange([_codeLabel, _stepsLabel, _addressLabel, _buttonCopyCode, _buttonNewCode]);
+        _buttonCancelPairing.Click += (_, _) =>
+        {
+            _showPairing = false;
+            RefreshState();
+        };
+        _pairPanel.Controls.AddRange([
+            _codeLabel, _stepsLabel, _addressLabel, _buttonCopyCode, _buttonNewCode, _buttonCancelPairing
+        ]);
         Controls.Add(_pairPanel);
 
-        // 已配对：状态条上已经写了"已连接到 xxx"，这里只留一行说明和解除按钮
+        // 已配对：显示全部设备，仍可继续添加或逐台解除授权。
         _connectedPanel.BackColor = Color.White;
         _connectedSub.AutoSize = false;
         _connectedSub.ForeColor = Theme.Muted;
-        _connectedSub.Text = "手机收到短信会自动显示在下面";
-        ConfigureButton(_buttonUnpair, "解除配对");
-        _buttonUnpair.Click += (_, _) => UnpairAll();
-        _connectedPanel.Controls.AddRange([_connectedSub, _buttonUnpair]);
+        _deviceList.BorderStyle = BorderStyle.FixedSingle;
+        _deviceList.Font = Theme.Ui(8.5f);
+        _deviceList.IntegralHeight = false;
+        ConfigureButton(_buttonAddDevice, "添加设备");
+        ConfigureButton(_buttonUnpair, "解除所选");
+        _buttonAddDevice.Click += (_, _) =>
+        {
+            _showPairing = true;
+            RefreshState();
+        };
+        _buttonUnpair.Click += (_, _) => UnpairSelected();
+        _connectedPanel.Controls.AddRange([_connectedSub, _deviceList, _buttonAddDevice, _buttonUnpair]);
         Controls.Add(_connectedPanel);
 
         // 短信列表
@@ -352,24 +373,36 @@ public sealed class MainForm : Form
         var bodyTop = y;
         var footerHeight = S(104);
         var paired = _config.Links.Count > 0;
-        var panelHeight = paired ? S(56) : S(238);
+        var showingPairing = _showPairing || !paired;
+        var panelHeight = showingPairing ? S(238) : S(142);
         var bodyHeight = Math.Max(S(120), ClientSize.Height - bodyTop - footerHeight);
 
         _pairPanel.SetBounds(0, bodyTop, width, panelHeight);
         _connectedPanel.SetBounds(0, bodyTop, width, panelHeight);
 
-        if (paired)
+        if (!showingPairing)
         {
-            _connectedSub.SetBounds(pad, S(14), width - pad * 2 - S(104), S(28));
-            _buttonUnpair.SetBounds(width - pad - S(96), S(12), S(96), S(30));
+            _connectedSub.SetBounds(pad, S(8), width - pad * 2, S(22));
+            _deviceList.SetBounds(pad, S(32), width - pad * 2, S(66));
+            _buttonAddDevice.SetBounds(width - pad - S(200), S(104), S(96), S(30));
+            _buttonUnpair.SetBounds(width - pad - S(96), S(104), S(96), S(30));
         }
         else
         {
             _codeLabel.SetBounds(pad + S(30), S(14), width - (pad + S(30)) * 2, S(72));
             _stepsLabel.SetBounds(pad + S(30), S(98), width - (pad + S(30)) * 2, S(66));
             _addressLabel.SetBounds(pad + S(30), S(168), width - (pad + S(30)) * 2, S(22));
-            _buttonCopyCode.SetBounds(width - pad - S(216), S(194), S(104), S(30));
-            _buttonNewCode.SetBounds(width - pad - S(104), S(194), S(104), S(30));
+            if (paired)
+            {
+                _buttonCopyCode.SetBounds(pad, S(194), S(104), S(30));
+                _buttonNewCode.SetBounds(pad + S(112), S(194), S(112), S(30));
+                _buttonCancelPairing.SetBounds(width - pad - S(80), S(194), S(80), S(30));
+            }
+            else
+            {
+                _buttonCopyCode.SetBounds(width - pad - S(216), S(194), S(104), S(30));
+                _buttonNewCode.SetBounds(width - pad - S(104), S(194), S(104), S(30));
+            }
         }
 
         _messageList.SetBounds(pad, bodyTop + panelHeight, width - pad * 2, bodyHeight - panelHeight);
@@ -392,7 +425,11 @@ public sealed class MainForm : Form
         {
             _server = new SmsServer(_config, _messages);
             _server.MessageReceived += message => BeginInvoke(() => OnMessage(message));
-            _server.LinksChanged += () => BeginInvoke(RefreshState);
+            _server.LinksChanged += () => BeginInvoke(() =>
+            {
+                _showPairing = false;
+                RefreshState();
+            });
             _server.Start();
 
             _discovery = new Discovery(_config);
@@ -409,28 +446,38 @@ public sealed class MainForm : Form
     private void RefreshState()
     {
         var paired = _config.Links.Count > 0;
-        var name = paired ? _config.Links[^1].Name : "";
 
-        _statusText = paired ? $"已连接到 {name}" : "等待手机配对";
+        _statusText = paired ? $"已配对 {_config.Links.Count} 台设备" : "等待手机配对";
         _statusColor = paired ? Theme.Ok : Theme.Warn;
         _header.Invalidate();
 
-        _pairPanel.Visible = !paired;
-        _connectedPanel.Visible = paired;
+        _pairPanel.Visible = _showPairing || !paired;
+        _connectedPanel.Visible = paired && !_showPairing;
+        _buttonCancelPairing.Visible = paired;
 
-        if (!paired)
+        _codeLabel.Text = string.Join("  ", _config.PairCode.PadLeft(PairCodeLength, '0').ToCharArray());
+        _stepsLabel.Text = paired
+            ? "1. 在要添加的手机上打开“码上来”\n2. 确认手机和电脑连的是同一个 WiFi\n3. 点“配对电脑”，输入上面的 4 位数字"
+            : "1. 手机装好“码上来”并打开\n2. 确认手机和电脑连的是同一个 WiFi\n3. 点“配对电脑”，输入上面的 4 位数字";
+        var addresses = AppConfig.LocalIPv4();
+        _addressLabel.Text = addresses.Count > 0
+            ? "本机地址 " + string.Join(" / ", addresses)
+            : "没有检测到局域网地址，请检查网络连接";
+        _emptyHint.Text = paired
+            ? "还没有短信\n任一手机收到新短信后都会显示在这里"
+            : "配对成功后，手机上收到的短信会显示在这里";
+
+        var selected = _deviceList.SelectedIndex;
+        _deviceList.Items.Clear();
+        foreach (var link in _config.Links)
         {
-            _codeLabel.Text = string.Join("  ", _config.PairCode.PadLeft(PairCodeLength, '0').ToCharArray());
-            var addresses = AppConfig.LocalIPv4();
-            _addressLabel.Text = addresses.Count > 0
-                ? "本机地址 " + string.Join(" / ", addresses)
-                : "没有检测到局域网地址，请检查网络连接";
-            _emptyHint.Text = "配对成功后，手机上收到的短信会显示在这里";
+            _deviceList.Items.Add($"{link.DisplayName}  ·  {LastSeenText(link.LastSeen)}");
         }
-        else
+        if (_deviceList.Items.Count > 0)
         {
-            _emptyHint.Text = "还没有短信\n手机收到新短信后会自动出现在这里";
+            _deviceList.SelectedIndex = Math.Clamp(selected, 0, _deviceList.Items.Count - 1);
         }
+        _connectedSub.Text = $"已配对 {_config.Links.Count} 台；状态按最近一次成功通信计算";
 
         _checkAutostart.Checked = _config.StartWithWindows;
         _checkAutoCopy.Checked = _config.AutoCopy;
@@ -498,6 +545,7 @@ public sealed class MainForm : Form
         }
 
         RenderMessages();
+        RefreshState();
 
         if (_config.Sound)
         {
@@ -514,9 +562,12 @@ public sealed class MainForm : Form
         try
         {
             _lastNotified = message;
-            _tray.BalloonTipTitle = string.IsNullOrEmpty(message.Code)
+            var origin = string.IsNullOrWhiteSpace(message.Source)
                 ? message.From
-                : $"{message.From} · 验证码 {message.Code}";
+                : $"{message.Source} · {message.From}";
+            _tray.BalloonTipTitle = string.IsNullOrEmpty(message.Code)
+                ? origin
+                : $"{origin} · 验证码 {message.Code}";
             _tray.BalloonTipText = message.Body.Length > 120 ? message.Body[..120] + "…" : message.Body;
             _tray.ShowBalloonTip(4000);
         }
@@ -553,16 +604,35 @@ public sealed class MainForm : Form
         RenderMessages();
     }
 
-    private void UnpairAll()
+    private void UnpairSelected()
     {
-        if (MessageBox.Show("解除后手机需要重新配对，确定吗？", "码上来",
+        var index = _deviceList.SelectedIndex;
+        if (index < 0 || index >= _config.Links.Count)
+        {
+            ShowTrayTip("请先选择一台设备");
+            return;
+        }
+
+        var link = _config.Links[index];
+        if (MessageBox.Show($"解除 {link.DisplayName} 的配对？\n\n解除后，这台手机需要在手机端清除旧配对并重新配对。", "码上来",
                 MessageBoxButtons.OKCancel, MessageBoxIcon.Question) != DialogResult.OK)
         {
             return;
         }
-        _config.Links.Clear();
+        _config.Links.RemoveAt(index);
         _config.Save();
+        _showPairing = _config.Links.Count == 0;
         RefreshState();
+    }
+
+    private static string LastSeenText(long timestamp)
+    {
+        if (timestamp <= 0) return "尚未通信";
+        var elapsed = DateTimeOffset.Now - DateTimeOffset.FromUnixTimeMilliseconds(timestamp);
+        if (elapsed.TotalMinutes < 1) return "刚刚通信";
+        if (elapsed.TotalHours < 1) return $"{Math.Max(1, (int)elapsed.TotalMinutes)} 分钟前通信";
+        if (elapsed.TotalDays < 1) return $"{Math.Max(1, (int)elapsed.TotalHours)} 小时前通信";
+        return DateTimeOffset.FromUnixTimeMilliseconds(timestamp).ToLocalTime().ToString("M月d日 HH:mm 通信");
     }
 
     /* ---------------- 托盘与开机自启 ---------------- */

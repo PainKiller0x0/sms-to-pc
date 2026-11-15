@@ -373,7 +373,7 @@ public sealed class SmsServer : IDisposable
         SmsMessage message;
         lock (_sync)
         {
-            if (_messages.Any(item => item.Id == id))
+            if (_messages.Any(item => item.Id == id && IsSameSource(item, link)))
             {
                 return (200, Json(new JsonObject { ["ok"] = true, ["duplicate"] = true }));
             }
@@ -386,7 +386,8 @@ public sealed class SmsServer : IDisposable
                 Timestamp = timestamp,
                 ReceivedAt = DateTimeOffset.Now.ToUnixTimeMilliseconds(),
                 Code = CodeExtractor.Extract(text),
-                Source = link.Name,
+                Source = link.DisplayName,
+                SourceId = link.AndroidId,
             };
             _messages.Insert(0, message);
             if (_messages.Count > 500) _messages.RemoveRange(500, _messages.Count - 500);
@@ -395,9 +396,15 @@ public sealed class SmsServer : IDisposable
             _config.Save();
         }
 
-        Log?.Invoke($"收到短信：{message.From} → {Truncate(message.Body, 30)}");
+        Log?.Invoke($"收到短信：{message.Source} / {message.From} → {Truncate(message.Body, 30)}");
         MessageReceived?.Invoke(message);
         return (200, Json(new JsonObject { ["ok"] = true, ["id"] = message.Id }));
+    }
+
+    private static bool IsSameSource(SmsMessage message, Link link)
+    {
+        if (!string.IsNullOrEmpty(message.SourceId)) return message.SourceId == link.AndroidId;
+        return message.Source == link.Name || message.Source == link.DisplayName;
     }
 
     private long LockRemaining(string ip)

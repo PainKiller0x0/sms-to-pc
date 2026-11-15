@@ -10,6 +10,7 @@ public sealed class MessageCard : Control
 {
     private const int PadX = 14;
     private const int PadY = 12;
+    private const int SourceHeight = 18;
     private const int HeaderHeight = 22;
     private const int CodeRowHeight = 34;
     private const int MaxDisplayChars = 600;
@@ -52,8 +53,12 @@ public sealed class MessageCard : Control
         using var bodyFont = Theme.Ui(9.5f);
         using var timeFont = Theme.Ui(8.5f);
 
+        var sourceWidth = string.IsNullOrWhiteSpace(message.Source)
+            ? 0
+            : TextRenderer.MeasureText(message.Source, timeFont, new Size(int.MaxValue, int.MaxValue),
+                TextFormatFlags.NoPadding).Width;
         var headerWidth = TextRenderer.MeasureText(message.From, headerFont, new Size(int.MaxValue, int.MaxValue),
-                              TextFormatFlags.NoPadding).Width
+                               TextFormatFlags.NoPadding).Width
                           + TextRenderer.MeasureText(RelativeTime(message.Timestamp), timeFont,
                               new Size(int.MaxValue, int.MaxValue), TextFormatFlags.NoPadding).Width
                           + 40;
@@ -77,7 +82,7 @@ public sealed class MessageCard : Control
                         + 60;
         }
 
-        var desired = PadX * 2 + Math.Max(Math.Max(headerWidth, bodyWidth), codeWidth);
+        var desired = PadX * 2 + Math.Max(Math.Max(Math.Max(headerWidth, sourceWidth), bodyWidth), codeWidth);
         return Math.Clamp(desired, MinBubbleWidth, max);
     }
 
@@ -85,7 +90,8 @@ public sealed class MessageCard : Control
     {
         var body = Trim(message.Body);
         var bodyHeight = MeasureBodyHeight(body, bubbleWidth - PadX * 2);
-        var height = PadY + HeaderHeight + bodyHeight + PadY + 2;
+        var height = PadY + (string.IsNullOrWhiteSpace(message.Source) ? 0 : SourceHeight) +
+                     HeaderHeight + bodyHeight + PadY + 2;
         if (!string.IsNullOrEmpty(message.Code)) height += CodeRowHeight;
         return height;
     }
@@ -130,8 +136,19 @@ public sealed class MessageCard : Control
             Theme.StrokePath(g, path, hasCode ? Color.FromArgb(0xD8, 0xDD, 0xFB) : Theme.Line);
         }
 
-        // 第一行：发送方 + 时间
-        var inner = new Rectangle(PadX, PadY, Width - PadX * 2, HeaderHeight);
+        var headerTop = PadY;
+        if (!string.IsNullOrWhiteSpace(Message.Source))
+        {
+            using var sourceFont = Theme.Ui(8.5f, FontStyle.Bold);
+            TextRenderer.DrawText(
+                g, Message.Source, sourceFont,
+                new Rectangle(PadX, headerTop, Width - PadX * 2, SourceHeight), Theme.Brand,
+                TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
+            headerTop += SourceHeight;
+        }
+
+        // 发送方 + 时间
+        var inner = new Rectangle(PadX, headerTop, Width - PadX * 2, HeaderHeight);
         using (var senderFont = Theme.Ui(9f, FontStyle.Bold))
         {
             TextRenderer.DrawText(
@@ -146,7 +163,7 @@ public sealed class MessageCard : Control
         }
 
         // 正文
-        var bodyTop = PadY + HeaderHeight;
+        var bodyTop = headerTop + HeaderHeight;
         var bodyHeight = hasCode ? Height - bodyTop - CodeRowHeight - 6 : Height - bodyTop - PadY;
         using (var bodyFont = Theme.Ui(9.5f))
         {
