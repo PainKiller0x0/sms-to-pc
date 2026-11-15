@@ -15,6 +15,7 @@ internal static class WindowsNotification
     public const string AppUserModelId = "SmsLink.Desktop";
     private const string ToastActivatorClsid = "6D2665F0-71E8-4D97-AD84-BC171E17366B";
     private const string ToastActivatedArgument = "-ToastActivated";
+    private const int ShcneAssocChanged = 0x08000000;
 
     private static readonly object HandlerLock = new();
     private static readonly ConcurrentQueue<NotificationActivation> PendingActivations = new();
@@ -155,6 +156,9 @@ internal static class WindowsNotification
 
         Directory.CreateDirectory(programs);
         var shortcutPath = Path.Combine(programs, "码上来.lnk");
+        // 先删再建，避免对已有快捷方式以只读方式打开后无法写入 AUMID。
+        if (File.Exists(shortcutPath)) File.Delete(shortcutPath);
+
         var shellLinkObject = Activator.CreateInstance(
             Type.GetTypeFromCLSID(new Guid("00021401-0000-0000-C000-000000000046"))!)!;
         var shellLink = (IShellLinkW)shellLinkObject;
@@ -168,20 +172,35 @@ internal static class WindowsNotification
             var propertyStore = (IPropertyStore)shellLink;
             var appIdKey = new PropertyKey(
                 new Guid("9F4C2855-9F79-4B39-A8D0-E1D42DE1D5F3"), 5);
-            using (var appId = PropVariant.FromString(AppUserModelId))
+            var appId = new PropVariant { ValueType = 31, PointerValue = Marshal.StringToCoTaskMemUni(AppUserModelId) };
+            try
             {
-                propertyStore.SetValue(ref appIdKey, appId);
+                ThrowIfFailed(propertyStore.SetValue(ref appIdKey, ref appId));
+            }
+            finally
+            {
+                PropVariantClear(ref appId);
             }
 
             var activatorKey = new PropertyKey(
                 new Guid("9F4C2855-9F79-4B39-A8D0-E1D42DE1D5F3"), 26);
-            using (var activator = PropVariant.FromGuid(new Guid(ToastActivatorClsid)))
+            var guidPointer = Marshal.AllocCoTaskMem(16);
+            Marshal.Copy(new Guid(ToastActivatorClsid).ToByteArray(), 0, guidPointer, 16);
+            var activator = new PropVariant { ValueType = 72, PointerValue = guidPointer };
+            try
             {
-                propertyStore.SetValue(ref activatorKey, activator);
+                ThrowIfFailed(propertyStore.SetValue(ref activatorKey, ref activator));
             }
-            propertyStore.Commit();
+            finally
+            {
+                PropVariantClear(ref activator);
+            }
 
+            ThrowIfFailed(propertyStore.Commit());
             ((IPersistFile)shellLink).Save(shortcutPath, true);
+
+            // 让资源管理器重新扫描开始菜单，否则新 AUMID 可能还进不了通知中心。
+            SHChangeNotify(ShcneAssocChanged, 0, IntPtr.Zero, IntPtr.Zero);
         }
         finally
         {
@@ -189,11 +208,19 @@ internal static class WindowsNotification
         }
     }
 
+    private static void ThrowIfFailed(int hresult)
+    {
+        if (hresult < 0) Marshal.ThrowExceptionForHR(hresult);
+    }
+
     [DllImport("shell32.dll", CharSet = CharSet.Unicode)]
     private static extern int SetCurrentProcessExplicitAppUserModelID(string appId);
 
+    [DllImport("shell32.dll")]
+    private static extern void SHChangeNotify(int eventId, uint flags, IntPtr item1, IntPtr item2);
+
     [DllImport("ole32.dll")]
-    private static extern int PropVariantClear([In, Out] PropVariant variant);
+    private static extern int PropVariantClear(ref PropVariant variant);
 
     [StructLayout(LayoutKind.Sequential, Pack = 4)]
     private struct PropertyKey(Guid formatId, uint propertyId)
@@ -203,28 +230,10 @@ internal static class WindowsNotification
     }
 
     [StructLayout(LayoutKind.Explicit)]
-    private sealed class PropVariant : IDisposable
+    private struct PropVariant
     {
-        [FieldOffset(0)] private readonly ushort _valueType;
-        [FieldOffset(8)] private readonly IntPtr _pointerValue;
-
-        private PropVariant(ushort valueType, IntPtr pointerValue)
-        {
-            _valueType = valueType;
-            _pointerValue = pointerValue;
-        }
-
-        public static PropVariant FromString(string value) =>
-            new(31, Marshal.StringToCoTaskMemUni(value)); // VT_LPWSTR
-
-        public static PropVariant FromGuid(Guid value)
-        {
-            var pointer = Marshal.AllocCoTaskMem(Marshal.SizeOf<Guid>());
-            Marshal.StructureToPtr(value, pointer, false);
-            return new PropVariant(72, pointer); // VT_CLSID
-        }
-
-        public void Dispose() => PropVariantClear(this);
+        [FieldOffset(0)] public ushort ValueType;
+        [FieldOffset(8)] public IntPtr PointerValue;
     }
 
     [ComImport]
@@ -259,9 +268,9 @@ internal static class WindowsNotification
     {
         void GetCount(out uint propertyCount);
         void GetAt(uint propertyIndex, out PropertyKey key);
-        void GetValue(ref PropertyKey key, [Out] PropVariant value);
-        void SetValue(ref PropertyKey key, [In] PropVariant value);
-        void Commit();
+        void GetValue(ref PropertyKey key, out PropVariant value);
+        [PreserveSig] int SetValue(ref PropertyKey key, ref PropVariant value);
+        [PreserveSig] int Commit();
     }
 }
 
